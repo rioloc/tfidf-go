@@ -175,23 +175,9 @@ goos: darwin
 goarch: amd64
 pkg: github.com/rioloc/tfidf-go/similarity
 cpu: Intel(R) Core(TM) i7-8559U CPU @ 2.70GHz
-BenchmarkCosineSimilarity_Do_Small-8    	   4045	   304709 ns/op
-BenchmarkCosineSimilarity_Do_Medium-8   	    342	  3769138 ns/op
-BenchmarkCosineSimilarity_Do_Large-8    	     19	 54282016 ns/op
+BenchmarkCosineSimilarity_Do_Small-8    	  49926	    27438 ns/op	  14854 B/op	     77 allocs/op
+BenchmarkCosineSimilarity_Do_Medium-8   	   1587	   734638 ns/op	 377003 B/op	    975 allocs/op
+BenchmarkCosineSimilarity_Do_Large-8    	     74	 15078496 ns/op	7413658 B/op	  12506 allocs/op
 PASS
-ok  	github.com/rioloc/tfidf-go/similarity	4.375s
+ok  	github.com/rioloc/tfidf-go/similarity	4.343s
 ```
-
-The interesting part is the following
-
-```text
-BenchmarkCosineSimilarity_Do_Small -> ~0.304 ms/op
-BenchmarkCosineSimilarity_Do_Medium -> ~3.7 ms/op
-BenchmarkCosineSimilarity_Do_Large -> ~54.2 ms/op
-```
-
-And by taking a look on it, we can notice that the `CosineSimilarity.Do` performs well-enough for `Small` and `Medium` datasets, while it degrades for `Large` datasets, making it not suitable for real time scenarios. Indeed:
-
-- When going from Small to Medium dataset size, runtime increases by about 12 times.
-- Going from Medium to Large, it increases by roughly 14 times.
-- From Small to Large, it slows down by almost 178 times.

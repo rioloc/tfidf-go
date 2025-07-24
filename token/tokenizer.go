@@ -1,32 +1,17 @@
 package token
 
 import (
-	"regexp"
 	"slices" // Importing the slices package for sorting.
-)
-
-const (
-	// defaultTokenPattern is the default regular expression used for tokenization.
-	// `(?i)` enables case-insensitive matching.
-	// `\p{L}{2,}` matches words with two Unicode letters or more.
-	defaultTokenPattern = `(?i)\p{L}{2,}`
+	"unicode"
 )
 
 // Tokenizer is a simple tokenizer implementation based on regular expressions.
 type Tokenizer struct {
-	tokenPattern  string              // The regular expression pattern used to find tokens.
 	normalizeFunc func(string) string // An optional function to normalize tokens (e.g., convert to lowercase).
 }
 
 // TokenizerOption is a function type that allows for configuring the Tokenizer.
 type TokenizerOption func(*Tokenizer)
-
-// WithTokenPattern is a functional option to set a custom token pattern for the Tokenizer.
-func WithTokenPattern(pattern string) TokenizerOption {
-	return func(t *Tokenizer) {
-		t.tokenPattern = pattern
-	}
-}
 
 // WithNormalizeFunc is a functional option to set a normalization function for the Tokenizer.
 // This function will be applied to each token after extraction.
@@ -39,9 +24,7 @@ func WithNormalizeFunc(fn func(string) string) TokenizerOption {
 // NewTokenizer is a constructor function that creates and returns a new Tokenizer instance.
 // It accepts a variable number of TokenizerOption functions to configure the tokenizer.
 func NewTokenizer(opts ...TokenizerOption) *Tokenizer {
-	t := &Tokenizer{
-		tokenPattern: defaultTokenPattern, // Initialize with the default pattern.
-	}
+	t := &Tokenizer{}
 
 	// Apply all provided options to the tokenizer.
 	for _, opt := range opts {
@@ -57,39 +40,55 @@ func (t *Tokenizer) Tokenize(documents []string) ([]string, [][]string, error) {
 	tokens := make([][]string, len(documents))
 	// Process each document individually.
 	for i, doc := range documents {
-		tkns, err := t.tokenize(doc) // Call the internal tokenize method for a single document.
-		if err != nil {
-			return nil, nil, err
+		tkns := t.tokenize(doc)
+		if t.normalizeFunc != nil {
+			for j, term := range tkns {
+				tkns[j] = t.normalizeFunc(term)
+			}
 		}
 		tokens[i] = tkns
 	}
-	// Generate the vocabulary from all tokens and return it along with the tokenized documents.
 	return vocabulary(tokens), tokens, nil
-
 }
 
 // tokenize extracts tokens from a single document string based on the tokenizer's pattern.
 // If a normalize function is set, it applies normalization to each extracted term.
-func (t *Tokenizer) tokenize(doc string) ([]string, error) {
-	r, err := regexp.Compile(t.tokenPattern) // Compile the regular expression pattern.
-	if err != nil {
-		return nil, err
-	}
-	// Find all strings that match the token pattern in the document.
-	terms := r.FindAllString(doc, -1)
+func (t *Tokenizer) tokenize(doc string) []string {
 
-	// If no normalization function is provided, return the terms as-is.
-	if t.normalizeFunc == nil {
-		return terms, nil
+	// estimate the number of tokens to avoid reallocations
+	// this is a rough estimate, but it's good enough for most cases
+	// we divide by 8 because we expect to find 8 tokens per word
+	// the number 8 is an arbitrary, but reasonable, estimate for the average length of a word
+	tokens := make([]string, 0, len(doc)/8)
+
+	// zero allocation tokenization
+	start := -1
+	for i, r := range doc {
+		if unicode.IsLetter(r) {
+			if start == -1 {
+				start = i
+			}
+			continue
+		}
+		if start != -1 && i-start > 1 {
+			tokens = append(tokens, t.doNormalize(doc[start:i]))
+		}
+		start = -1
+	}
+	// handle trailing token
+	if start != -1 && len(doc)-start > 1 {
+		tokens = append(tokens, t.doNormalize(doc[start:]))
 	}
 
-	// If normalization is enabled, apply the normalizeFunc to every extracted term.
-	normalizedTerms := make([]string, len(terms))
-	for j, term := range terms {
-		normalizedTerms[j] = t.normalizeFunc(term)
-	}
+	return tokens
+}
 
-	return normalizedTerms, nil
+// doNormalize applies the normalization function to a token if it is defined
+func (t *Tokenizer) doNormalize(token string) string {
+	if t.normalizeFunc != nil {
+		return t.normalizeFunc(token)
+	}
+	return token
 }
 
 // vocabulary extracts all unique tokens from a 2D slice of tokens (documents)
